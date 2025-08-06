@@ -1,39 +1,91 @@
 package com.vagarious.backend.hrms.controller;
 
-import java.io.IOException;
+import com.vagarious.backend.hrms.model.Employee;
+import com.vagarious.backend.hrms.model.Experience;
+import com.vagarious.backend.hrms.repository.EmployeeRepository;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.multipart.MultipartFile;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
 
-import com.vagarious.backend.hrms.model.Employee;
-import com.vagarious.backend.hrms.service.EmployeeService;
+import java.util.Base64;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/employees")
+@CrossOrigin(origins = "*")
 public class EmployeeController {
 
     @Autowired
-    private EmployeeService employeeService;
+    private EmployeeRepository employeeRepository;
 
+    // ✅ Create or Save Employee
     @PostMapping
-    public Employee save(@RequestBody Employee e) {
-        return employeeService.save(e);
+    public ResponseEntity<Employee> saveEmployee(@RequestBody Employee employee) {
+        // ✅ Decode base64 resume if not null
+        if (employee.getResume() != null) {
+            try {
+                String base64String = new String(employee.getResume());
+                byte[] decodedResume = Base64.getDecoder().decode(base64String);
+                employee.setResume(decodedResume);
+            } catch (IllegalArgumentException e) {
+                return ResponseEntity.badRequest().body(null);
+            }
+        }
+
+        // ✅ Set employee reference in experiences
+        List<Experience> experiences = employee.getExperienceDetails();
+        if (experiences != null) {
+            for (Experience exp : experiences) {
+                exp.setEmployee(employee);
+            }
+        }
+
+        // ✅ Save employee with all embedded & child data
+        Employee savedEmployee = employeeRepository.save(employee);
+        return ResponseEntity.ok(savedEmployee);
     }
 
-    @PostMapping("/{id}/uploadResume")
-    public String uploadResume(@PathVariable String id, @RequestParam MultipartFile file) throws IOException {
-        return employeeService.uploadResume(id, file);
+    // ✅ Get all employees
+    @GetMapping
+    public ResponseEntity<List<Employee>> getAllEmployees() {
+        return ResponseEntity.ok(employeeRepository.findAll());
     }
 
+    // ✅ Get single employee by ID
     @GetMapping("/{id}")
-    public Employee getById(@PathVariable String id) {
-        return employeeService.getById(id);
+    public ResponseEntity<Employee> getEmployee(@PathVariable String id) {
+        return employeeRepository.findById(id)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    // ✅ Delete employee
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteEmployee(@PathVariable String id) {
+        if (employeeRepository.existsById(id)) {
+            employeeRepository.deleteById(id);
+            return ResponseEntity.noContent().build();
+        } else {
+            return ResponseEntity.notFound().build();
+        }
+    }
+
+    // ✅ Update employee
+    @PutMapping("/{id}")
+    public ResponseEntity<Employee> updateEmployee(@PathVariable String id, @RequestBody Employee updatedEmployee) {
+        return employeeRepository.findById(id).map(existing -> {
+            updatedEmployee.setEmployeeId(id);
+
+            // Set back-reference for experiences
+            List<Experience> updatedExperiences = updatedEmployee.getExperienceDetails();
+            if (updatedExperiences != null) {
+                for (Experience exp : updatedExperiences) {
+                    exp.setEmployee(updatedEmployee);
+                }
+            }
+
+            return ResponseEntity.ok(employeeRepository.save(updatedEmployee));
+        }).orElse(ResponseEntity.notFound().build());
     }
 }
