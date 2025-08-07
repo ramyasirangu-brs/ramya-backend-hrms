@@ -37,4 +37,8 @@ public class Employee {
 
     @OneToMany(mappedBy = "employee", cascade = CascadeType.ALL)
     private List<Experience> experienceDetails = new ArrayList<>();
+    
+    @OneToMany(mappedBy = "employee", cascade = CascadeType.ALL)
+    private List<LeaveRequest> leaveRequests = new ArrayList<>();
+
 }
